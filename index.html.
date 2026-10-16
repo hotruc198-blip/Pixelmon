@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pixelmon Adventure</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101827;color:white;font-family:Arial,sans-serif;text-align:center;overflow-x:hidden}
+h1{color:#ffd54a;margin:12px 0 5px}
+button{border:0;border-radius:10px;padding:11px 15px;font-weight:bold;background:#ffca28;color:#222;cursor:pointer}
+button:active{transform:scale(.95)}
+.panel{background:#202d40;border:2px solid #40536b;border-radius:14px;padding:12px;margin:10px auto;max-width:850px}
+#choose button{margin:5px}
+#game{display:none}
+#hud{display:flex;justify-content:space-around;flex-wrap:wrap;gap:8px}
+.bar{height:14px;background:#4b2630;border-radius:10px;overflow:hidden;margin:5px 0}
+.fill{height:100%;width:100%;background:#55e66c;transition:width .2s}
+#bossFill{background:#ff3c55}
+#world{width:min(96vw,800px);height:min(65vh,500px);min-height:300px;border:4px solid #526d45;border-radius:12px;background:#79b95b;display:block;margin:auto;image-rendering:pixelated;touch-action:none}
+#log{min-height:35px;color:#ffe082}
+#controls{display:grid;grid-template-columns:repeat(3,65px);grid-template-rows:repeat(2,55px);gap:5px;justify-content:center;margin:10px}
+#controls button{padding:5px;font-size:22px}
+#moves{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+#moves button{background:#7bdcff}
+.small{color:#cbd5e1;font-size:13px}
+</style>
+</head>
+<body>
+<h1>⚡ PIXELMON ADVENTURE ⚡</h1>
+<div class="small">Khám phá thế giới • Thu phục Pokémon • Đánh bại Boss</div>
+
+<div id="choose" class="panel">
+<h2>Chọn Pokémon khởi đầu</h2>
+<button onclick="start('Pikachu')">⚡ Pikachu</button>
+<button onclick="start('Charmander')">🔥 Charmander</button>
+<button onclick="start('Bulbasaur')">🌿 Bulbasaur</button>
+<button onclick="start('Squirtle')">💧 Squirtle</button>
+<p class="small">Di chuyển bằng phím WASD, phím mũi tên hoặc nút trên màn hình.</p>
+</div>
+
+<div id="game">
+<div class="panel" id="hud">
+<div>🧢 <span id="playerName">Huấn luyện viên</span><br>Lv.<span id="level">1</span></div>
+<div>⭐ EXP: <span id="exp">0</span></div>
+<div>🪙 Xu: <span id="coins">0</span></div>
+<div>📍 <span id="position">0, 0</span></div>
+</div>
+
+<div class="panel">
+<div id="myLabel">Pokémon của bạn</div>
+<div class="bar"><div id="myFill" class="fill"></div></div>
+<div id="myHP">100 / 100 HP</div>
+<div id="enemyLabel">Chưa gặp Pokémon hoang dã</div>
+<div class="bar"><div id="enemyFill" class="fill"></div></div>
+<div id="enemyHP">--</div>
+<div id="bossArea" style="display:none">
+<h3>👹 BOSS PIXELMON</h3>
+<div class="bar"><div id="bossFill" class="fill"></div></div>
+<div id="bossHP"></div>
+</div>
+</div>
+
+<canvas id="world" width="800" height="500"></canvas>
+
+<div class="panel">
+<div id="log">Chào mừng đến thế giới Pixelmon!</div>
+<div id="moves">
+<button onclick="attack(0)">⚡ Tấn công</button>
+<button onclick="attack(1)">💥 Kỹ năng mạnh</button>
+<button onclick="heal()">💚 Hồi phục</button>
+<button onclick="catchPokemon()">🔴 Thu phục</button>
+<button onclick="saveGame()">💾 Lưu game</button>
+<button onclick="spawnBoss()">👹 Gọi Boss</button>
+</div>
+</div>
+
+<div id="controls">
+<div></div><button onclick="move(0,-1)">⬆️</button><div></div>
+<button onclick="move(-1,0)">⬅️</button>
+<button onclick="move(0,1)">⬇️</button>
+<button onclick="move(1,0)">➡️</button>
+</div>
+<p class="small">Đi qua bãi cỏ để gặp Pokémon hoang dã. Hãy tìm Boss để thử sức!</p>
+</div>
+
+<script>
+const canvas=document.getElementById("world");
+const ctx=canvas.getContext("2d");
+
+let player={x:400,y:250};
+let pokemon="Pikachu";
+let level=1,exp=0,coins=0;
+let maxHP=100,hp=100;
+let enemy=null,boss=null;
+let wild=[],effects=[];
+let keys={};
+let steps=0;
+
+const colors={
+ Pikachu:"#ffdf39",
+ Charmander:"#ff792f",
+ Bulbasaur:"#61c66b",
+ Squirtle:"#54c8ef",
+ Eevee:"#c99459",
+ Snorlax:"#4983bb",
+ Boss:"#a637ef"
+};
+
+function say(t){
+ document.getElementById("log").textContent=t;
+}
+
+function start(name){
+ pokemon=name;
+ document.getElementById("choose").style.display="none";
+ document.getElementById("game").style.display="block";
+ loadGame();
+ makeWorld();
+ draw();
+ updateHUD();
+ say("Bạn đã chọn "+pokemon+". Hãy khám phá thế giới!");
+}
+
+function makeWorld(){
+ wild=[];
+ for(let i=0;i<45;i++){
+  wild.push({
+   x:30+Math.random()*740,
+   y:30+Math.random()*440,
+   name:["Pikachu","Charmander","Bulbasaur","Squirtle","Eevee","Snorlax"][Math.floor(Math.random()*6)],
+   hp:40+Math.floor(Math.random()*40),
+   max:80
+  });
+ }
+}
+
+function drawPokemon(x,y,name,size=24){
+ ctx.fillStyle=colors[name]||"#fff";
+ ctx.fillRect(x-size/2,y-size/2,size,size);
+ ctx.fillStyle="#222";
+ ctx.fillRect(x-size/3,y-size/5,4,4);
+ ctx.fillRect(x+size/6,y-size/5,4,4);
+ ctx.fillStyle="#fff";
+ ctx.fillRect(x-size/3,y-size/5,2,2);
+ ctx.fillRect(x+size/6,y-size/5,2,2);
+ ctx.fillStyle=colors[name]||"#fff";
+ ctx.fillRect(x-size/2-4,y-size/2+4,5,8);
+ ctx.fillRect(x+size/2-1,y-size/2+4,5,8);
+}
+
+function draw(){
+ ctx.clearRect(0,0,800,500);
+
+ // Cỏ nền
+ ctx.fillStyle="#79b95b";
+ ctx.fillRect(0,0,800,500);
+
+ // Đường đất
+ ctx.fillStyle="#cbb078";
+ ctx.fillRect(0,220,800,65);
+ ctx.fillRect(350,0,75,500);
+
+ // Hồ nước
+ ctx.fillStyle="#48bde8";
+ ctx.fillRect(35,40,130,75);
+ ctx.fillRect(620,350,140,95);
+
+ // Cây
+ for(let i=0;i<50;i++){
+  let x=(i*137+50)%790;
+  let y=(i*83+30)%480;
+  if(Math.abs(y-250)<45||Math.abs(x-390)<45)continue;
+  ctx.fillStyle="#347b3c";
+  ctx.fillRect(x-10,y-10,20,20);
+  ctx.fillStyle="#1c5b32";
+  ctx.fillRect(x-5,y-17,10,10);
+ }
+
+ // Pokémon hoang dã
+ wild.forEach(w=>{
+  drawPokemon(w.x,w.y,w.name,20);
+ });
+
+ // Boss
+ if(boss){
+  drawPokemon(boss.x,boss.y,"Boss",42);
+  ctx.fillStyle="white";
+  ctx.font="bold 15px Arial";
+  ctx.fillText("BOSS",boss.x-20,boss.y-30);
+ }
+
+ // Nhân vật người chơi
+ ctx.fillStyle="#e53935";
+ ctx.fillRect(player.x-10,player.y-14,20,20);
+ ctx.fillStyle="#ffdbac";
+ ctx.fillRect(player.x-7,player.y-22,14,12);
+ ctx.fillStyle="#2868e8";
+ ctx.fillRect(player.x-10,player.y+6,20,10);
+
+ // Hiệu ứng
+ effects.forEach(e=>{
+  ctx.strokeStyle=e.color;
+  ctx.lineWidth=4;
+  ctx.beginPath();
+  ctx.arc(e.x,e.y,e.r,0,Math.PI*2);
+  ctx.stroke();
+ });
+}
+
+function updateHUD(){
+ document.getElementById("playerName").textContent=pokemon;
+ document.getElementById("level").textContent=level;
+ document.getElementById("exp").textContent=exp;
+ document.getElementById("coins").textContent=coins;
+ document.getElementById("position").textContent=
+  Math.floor(player.x)+", "+Math.floor(player.y);
+
+ document.getElementById("myFill").style.width=
+  Math.max(0,hp/maxHP*100)+"%";
+ document.getElementById("myHP").textContent=hp+" / "+maxHP+" HP";
+
+ if(enemy){
+  document.getElementById("enemyLabel").textContent="Đối thủ: "+enemy.name;
+  document.getElementById("enemyFill").style.width=
+   Math.max(0,enemy.hp/enemy.max*100)+"%";
+  document.getElementById("enemyHP").textContent=
+   Math.max(0,enemy.hp)+" / "+enemy.max+" HP";
+ }else{
+  document.getElementById("enemyLabel").textContent="Chưa gặp Pokémon hoang dã";
+  document.getElementById("enemyFill").style.width="0%";
+  document.getElementById("enemyHP").textContent="--";
+ }
+
+ document.getElementById("bossArea").style.display=boss?"block":"none";
+ if(boss){
+  document.getElementById("bossFill").style.width=
+   Math.max(0,boss.hp/boss.max*100)+"%";
+  document.getElementById("bossHP").textContent=
+   Math.max(0,boss.hp)+" / "+boss.max+" HP";
+ }
+}
+
+function move(dx,dy){
+ player.x=Math.max(15,Math.min(785,player.x+dx*22));
+ player.y=Math.max(15,Math.min(485,player.y+dy*22));
+ steps++;
+
+ if(steps%3===0){
+  let nearby=wild.find(w=>
+   Math.abs(w.x-player.x)<35&&Math.abs(w.y-player.y)<35
+  );
+  if(nearby&&!enemy){
+   enemy={...nearby,max:nearby.hp};
+   say("Một Pokémon hoang dã xuất hiện: "+enemy.name+"!");
+  }
+ }
+ if(boss&&Math.abs(boss.x-player.x)<40&&Math.abs(boss.y-player.y)<40){
+  say("Boss đang ở gần! Hãy dùng kỹ năng chiến đấu!");
+ }
+ draw();
+ updateHUD();
+}
+
+document.addEventListener("keydown",e=>{
+ const k=e.key.toLowerCase();
+ if(["arrowup","arrowdown","arrowleft","arrowright"," "].includes(k))e.preventDefault();
+ if(k==="arrowup"||k==="w")move(0,-1);
+ if(k==="arrowdown"||k==="s")move(0,1);
+ if(k==="arrowleft"||k==="a")move(-1,0);
+ if(k==="arrowright"||k==="d")move(1,0);
+});
+
+function addEffect(x,y,color){
+ effects.push({x,y,color,r:8});
+ draw();
+ setTimeout(()=>{
+  effects=effects.filter(e=>!(e.x===x&&e.y===y));
+  draw();
+ },350);
+}
+
+function attack(power){
+ if(!enemy&&!boss){
+  say("Hãy di chuyển đến gần Pokémon hoang dã hoặc gọi Boss!");
+  return;
+ }
+
+ let target=boss||enemy;
+ let damage=power===1?35+level*7:18+level*4;
+
+ if(pokemon==="Pikachu")damage+=5;
+ if(pokemon==="Charmander"&&power===1)damage+=10;
+ if(pokemon==="Bulbasaur"&&power===1)damage+=7;
+
+ target.hp-=damage;
+ addEffect(target.x,target.y,power===1?"#ff4055":"#fff34a");
+ say(pokemon+" dùng "+(power===1?"SIÊU KỸ NĂNG":"TẤN CÔNG")+" gây "+damage+" sát thương!");
+
+ if(target.hp<=0){
+  if(boss){
+   boss=null;
+   coins+=100;
+   exp+=100;
+   say("🎉 Bạn đã đánh bại BOSS! Nhận 100 xu và 100 EXP!");
+  }else{
+   wild=wild.filter(w=>w!==target);
+   enemy=null;
+   coins+=10;
+   exp+=20;
+   say("Chiến thắng! Bạn nhận 10 xu và 20 EXP.");
+  }
+  checkLevel();
+  updateHUD();
+  draw();
+  saveGame();
+  return;
+ }
+
+ updateHUD();
+ setTimeout(enemyAttack,450);
+}
+
+function enemyAttack(){
+ if(!enemy&&!boss)return;
+ let target=boss||enemy;
+ let damage=boss?20+Math.floor(Math.random()*15):8+Math.floor(Math.random()*10);
+ hp=Math.max(0,hp-damage);
+ addEffect(player.x,player.y,"#ff3333");
+
+ if(hp<=0){
+  hp=Math.ceil(maxHP/2);
+  player.x=400;
+  player.y=250;
+  say("Bạn đã thua trận và được đưa về điểm hồi sinh!");
+ }else{
+  say(target.name+" phản công gây "+damage+" sát thương!");
+ }
+ updateHUD();
+}
+
+function heal(){
+ hp=Math.min(maxHP,hp+35);
+ say("Bạn đã hồi phục 35 HP!");
+ updateHUD();
+}
+
+function catchPokemon(){
+ if(!enemy){
+  say("Bạn cần gặp Pokémon hoang dã trước!");
+  return;
+ }
+ if(Math.random()<0.65||enemy.hp<enemy.max*0.3){
+  let name=enemy.name;
+  wild=wild.filter(w=>w!==enemy);
+  enemy=null;
+  coins+=5;
+  say("🔴 Thu phục thành công "+name+"! Nhận thêm 5 xu.");
+  saveGame();
+ }else{
+  say("Pokémon đã thoát! Hãy làm yếu nó rồi thử lại.");
+ }
+ updateHUD();
+ draw();
+}
+
+function spawnBoss(){
+ if(boss){
+  say("Boss đã xuất hiện rồi!");
+  return;
+ }
+ boss={
+  x:player.x>400?100:700,
+  y:player.y>250?100:400,
+  name:"Boss Pixelmon",
+  hp:350+level*50,
+  max:350+level*50
+ };
+ say("⚠️ BOSS PIXELMON xuất hiện! Hãy tiến lại gần và chiến đấu!");
+ updateHUD();
+ draw();
+}
+
+function checkLevel(){
+ while(exp>=level*100){
+  exp-=level*100;
+  level++;
+  maxHP+=20;
+  hp=maxHP;
+  say("🌟 LÊN CẤP "+level+"! HP tối đa tăng lên "+maxHP+"!");
+ }
+ updateHUD();
+}
+
+function saveGame(){
+ const data={pokemon,level,exp,coins,maxHP,hp,player};
+ try{
+  localStorage.setItem("pixelmonAdventureSave",JSON.stringify(data));
+  say("💾 Đã lưu tiến trình thành công!");
+ }catch(e){
+  say("Không thể lưu game trên trình duyệt này.");
+ }
+}
+
+function loadGame(){
+ try{
+  const raw=localStorage.getItem("pixelmonAdventureSave");
+  if(!raw)return;
+  const d=JSON.parse(raw);
+  pokemon=d.pokemon||pokemon;
+  level=d.level||1;
+  exp=d.exp||0;
+  coins=d.coins||0;
+  maxHP=d.maxHP||100;
+  hp=d.hp||maxHP;
+  player=d.player||player;
+ }catch(e){}
+}
+
+makeWorld();
+</script>
+</body>
+</html>
